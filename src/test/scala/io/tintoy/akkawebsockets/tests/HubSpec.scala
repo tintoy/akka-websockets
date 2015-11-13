@@ -1,3 +1,5 @@
+package io.tintoy.akkawebsockets.tests
+
 import akka.actor.ActorSystem
 import akka.stream.{OverflowStrategy, ActorMaterializer}
 import akka.stream.scaladsl.{Sink, Source, Flow}
@@ -5,10 +7,11 @@ import akka.testkit.{TestProbe, ImplicitSender, DefaultTimeout, TestKit}
 
 import com.typesafe.config.ConfigFactory
 
-import org.scalatest.{BeforeAndAfterEach, BeforeAndAfterAll, Matchers, WordSpecLike}
+import org.scalatest.{BeforeAndAfterAll, Matchers, WordSpecLike}
 
 import scala.concurrent.duration.DurationInt
 
+import io.tintoy.akkawebsockets.Hub
 import Hub.{HubMessageBus, HubMessage}
 
 /**

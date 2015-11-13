@@ -1,3 +1,5 @@
+package io.tintoy.akkawebsockets
+
 import akka.actor.ActorSystem
 import akka.http.scaladsl.server.Directives._
 import akka.http.scaladsl.model.HttpMethods._

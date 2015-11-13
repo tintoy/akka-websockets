@@ -1,3 +1,5 @@
+package io.tintoy.akkawebsockets
+
 import akka.actor._
 import akka.event.{ActorEventBus, LookupClassification}
 import akka.stream.OverflowStrategy
