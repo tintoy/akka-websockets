@@ -41,11 +41,11 @@ object Hub {
   /**
     * Create a new [[Hub]].
     * @param system The actor system in which the hub will be built.
-    * @return
+    * @param hubName A name for the hub (and its actor).
+    * @return The [[Hub]].
     */
-  def create(system: ActorSystem, hubName: String = "hub"): Hub = {
+  def create(system: ActorSystem, hubName: String = "hub", messageBus: HubMessageBus = new HubMessageBus()): Hub = {
     var clientsByName = immutable.Map[String, ActorRef]()
-    val messageBus = new HubMessageBus()
 
     val hubActor = system.actorOf(
       Props(new Actor {
@@ -54,9 +54,8 @@ object Hub {
             clientsByName += (clientName -> client)
             context.watch(client) // We want to know if the client has been disconnected.
 
-            messageBus.subscribe(client,
-              to = s"c/$clientName"
-            )
+            messageBus.subscribeClientAsSelf(client, clientName)
+
           case ClientDisconnected(clientName)         =>
             val client = clientsByName(clientName)
             context.unwatch(client)
@@ -68,22 +67,14 @@ object Hub {
           case JoinGroup(clientName, groupName)       =>
             val client = clientsByName(clientName)
 
-            messageBus.subscribe(client,
-              to = s"g/$groupName"
-            )
+            messageBus.subscribeClientToGroup(client, groupName)
 
           case LeaveGroup(clientName, groupName)      =>
             val client = clientsByName(clientName)
 
-            messageBus.unsubscribe(client,
-              from = s"g/$groupName"
-            )
+            messageBus.unsubscribeClientFromGroup(client, groupName)
 
-          case MessageFromClient(clientName, message) =>
-
-
-          case messageToClient: MessageToClient       => messageBus.publish(messageToClient)
-          case messageToGroup: MessageToGroup         => messageBus.publish(messageToGroup)
+          case sendMessage: SendMessage               => messageBus.publish(sendMessage)
 
           case Terminated(client)                     => messageBus.unsubscribe(client)
 
@@ -108,19 +99,16 @@ object Hub {
         * @return The configured [[Flow]].
         */
       override def buildClientMessageFlow(clientName: String): Flow[String, HubMessage, Unit] = {
-        val parser = new Regex("^([@#])(\\w+)\\s+(.*)")
-
         // Incoming stream of messages from the client's WebSocket.
         val input =
           Flow[String]
             .map(rawMessage => {
               // Parse raw message to extract destination client / group ('@' for client, '#' for group).
-              parser.pattern.split(rawMessage) match {
-                case Array("@", clientName, message)  => MessageToClient(clientName, message)
-                case Array("#", groupName, message)   => MessageToGroup(groupName, message)
-
-                case otherwise =>
-                  MessageToClient(clientName, "Message must start with @clientName or #groupName.")
+              val parser = new Regex("^([@#])(\\w+)\\s+(.*)")
+              rawMessage match {
+                case parser("@", targetClientName, message)  => MessageToClient(targetClientName, message)
+                case parser("#", targetGroupName, message)   => MessageToGroup(targetGroupName, message)
+                case otherwise                               => MessageToClient(clientName, "Message must start with @clientName or #groupName.")
               }
             })
             .to(hubActorSink(clientName))
@@ -158,11 +146,32 @@ object Hub {
   /**
     * Simple message bus used to implement client groups.
     */
-  private class HubMessageBus extends ActorEventBus with LookupClassification {
+  class HubMessageBus extends ActorEventBus with LookupClassification {
     /**
       * The initial size for the client / group lookup table.
       */
     override protected def mapSize(): Int = 50
+
+    /**
+      * Subscribe a client to the bus as themselves.
+      * @param client The client's [[ActorRef]].
+      * @param clientName The client name.
+      */
+    def subscribeClientAsSelf(client: ActorRef, clientName: String): Unit = subscribe(client, forClient(clientName))
+
+    /**
+      * Subscribe a client to the bus as a member of a client group.
+      * @param client The client's [[ActorRef]].
+      * @param groupName The group name.
+      */
+    def subscribeClientToGroup(client: ActorRef, groupName: String): Unit = subscribe(client, forGroup(groupName))
+
+    /**
+      * Unsubscribe a client from the bus as a member of a client group.
+      * @param client The client's [[ActorRef]].
+      * @param groupName The group name.
+      */
+    def unsubscribeClientFromGroup(client: ActorRef, groupName: String): Unit = unsubscribe(client, forGroup(groupName))
 
     /**
       * Determine the subset of subscribers to which the specified message should be published.
@@ -204,16 +213,46 @@ object Hub {
     * @param clientName The client name.
     * @param client An [[ActorRef]] representing the client.
     */
-  private case class ClientConnected(clientName: String, client: ActorRef) extends HubMessage
+  case class ClientConnected(clientName: String, client: ActorRef) extends HubMessage
 
   /**
     * A client has disconnected from the hub.
     * @param clientName The client name.
     */
-  private case class ClientDisconnected(clientName: String) extends HubMessage
-  private case class JoinGroup(clientName: String, groupName: String) extends HubMessage
-  private case class LeaveGroup(clientName: String, groupName: String) extends HubMessage
-  private case class MessageFromClient(clientName: String, message: String) extends HubMessage
-  private case class MessageToClient(clientName: String, message: String) extends HubMessage
-  private case class MessageToGroup(groupName: String, message: String) extends HubMessage
+  case class ClientDisconnected(clientName: String) extends HubMessage
+
+  /**
+    * Client wants to join a group.
+    * @param clientName The client name.
+    * @param groupName The group name.
+    */
+  case class JoinGroup(clientName: String, groupName: String) extends HubMessage
+
+  /**
+    * Client wants to leave a group.
+    * @param clientName The client name.
+    * @param groupName The group name.
+    */
+  case class LeaveGroup(clientName: String, groupName: String) extends HubMessage
+
+  // TODO: Include sending client name in MessageToXXX.
+
+  /**
+    * Represents a message from a client to another client or client group.
+    */
+  sealed trait SendMessage extends HubMessage
+
+  /**
+    * Client wants to send a message to another client.
+    * @param targetClientName The name of the client to which the message should be sent.
+    * @param messageText The message text.
+    */
+  case class MessageToClient(targetClientName: String, messageText: String) extends SendMessage
+
+  /**
+    * Client wants to send a message to all clients in a group.
+    * @param targetGroupName The name of the client group to which the message should be sent.
+    * @param messageText The message text.
+    */
+  case class MessageToGroup(targetGroupName: String, messageText: String) extends SendMessage
 }
