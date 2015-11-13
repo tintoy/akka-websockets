@@ -14,9 +14,8 @@ object Boot extends App {
   implicit val system = ActorSystem("akka-websockets")
   implicit val materializer = ActorMaterializer()
 
-  val greeterService = new GreeterService()
   val bindingFuture = Http().bindAndHandleSync(
-    greeterService.requestHandler,
+    GreeterService.create,
     interface = "localhost",
     port = 19123
   )
