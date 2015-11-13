@@ -23,7 +23,9 @@ object Boot extends App {
   )
 
   Await.result(bindingFuture, 5.seconds)
-  println("Listening on ws://localhost:19123/hub?name=xxx (press enter to terminate).")
+  println(
+    s"Listening on ws://localhost:19123/hubs/${hubService.hubName}?name=MyName (press enter to terminate)."
+  )
   StdIn.readLine()
 
   println("Shutting down...")

@@ -8,6 +8,8 @@ import akka.stream.scaladsl.{Flow, Sink, Source}
 import scala.collection._
 import scala.util.matching.Regex
 
+// TODO: Make client and group names case-insensitive.
+
 /**
   * Represents a hub for message exchange.
   */

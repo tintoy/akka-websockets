@@ -26,7 +26,7 @@ object HubService {
   * @param hubName A unique (per-[[ActorSystem]]) name for the hub.
   * @param system The [[ActorSystem]] in which to create the hub and its underlying actors.
   */
-class HubService(hubName: String, system: ActorSystem) {
+class HubService(val hubName: String, system: ActorSystem) {
   /**
     * The [[Hub]] hosted by the [[HubService]].
     * @note For now, only the sendXxxMessage functions are safe to call from outside the hub service.
@@ -38,7 +38,7 @@ class HubService(hubName: String, system: ActorSystem) {
     */
   def routes =
     get {
-      path("hub") {
+      path("hubs" / hubName) {
         parameter('name) { clientName =>
           handleWebsocketMessages(
             connectWebSocketToHub(clientName)
