@@ -115,8 +115,7 @@ object Hub {
           Flow[String]
             .map(rawMessage => {
               // Parse raw message to extract destination client / group ('@' for client, '#' for group).
-              val parsedMessage: Array[String] = parser.pattern.split(rawMessage)
-              parsedMessage match {
+              parser.pattern.split(rawMessage) match {
                 case Array("@", clientName, message)  => MessageToClient(clientName, message)
                 case Array("#", groupName, message)   => MessageToGroup(groupName, message)
 
@@ -129,10 +128,10 @@ object Hub {
         // Outgoing stream of parsed messages for the hub.
         val output =
           Source.actorRef[HubMessage](1, OverflowStrategy.fail)
-            .mapMaterializedValue { newClient =>
+            .mapMaterializedValue { clientWebSocket =>
               // When the source is first materialised, inject a ClientConnected message into the message stream.
-              // This enables us to capture the actor representing the WebSocket.
-              hubActor ! ClientConnected(clientName, newClient)
+              // This enables us to capture the actor representing the client's WebSocket.
+              hubActor ! ClientConnected(clientName, clientWebSocket)
             }
 
         Flow.fromSinkAndSource(input, output)
