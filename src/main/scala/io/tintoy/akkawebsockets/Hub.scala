@@ -55,12 +55,14 @@ object Hub {
     */
   def create(system: ActorSystem, hubName: String = "hub", messageBus: HubMessageBus = new HubMessageBus()): Hub = {
     var clientsByName = immutable.Map[String, ActorRef]()
+    var clientNames = immutable.Map[ActorRef, String]()
 
     val hubActor = system.actorOf(
       Props(new Actor {
         def receive: Receive = {
           case ClientConnected(clientName, client)    =>
             clientsByName += (clientName -> client)
+            clientNames += (client -> clientName)
             context.watch(client) // We want to know if the client has been disconnected.
 
             messageBus.subscribeClientAsSelf(client, clientName)
@@ -70,6 +72,7 @@ object Hub {
             context.unwatch(client)
 
             clientsByName -= clientName
+            clientNames -= client
 
             messageBus.unsubscribe(client)
 
@@ -85,7 +88,13 @@ object Hub {
 
           case sendMessage: SendMessage               => messageBus.publish(sendMessage)
 
-          case Terminated(client)                     => messageBus.unsubscribe(client)
+          case Terminated(clientRef)                  =>
+            // Client's dead; clean up.
+            val clientName = clientNames(clientRef)
+            clientsByName -= clientName
+            clientNames -= clientRef
+
+            messageBus.unsubscribe(clientRef)
 
           case other                                  => unhandled(other)
         }
@@ -201,7 +210,7 @@ object Hub {
       * @param client The client's [[ActorRef]].
       * @param clientName The client name.
       */
-    def subscribeClientAsSelf(client: ActorRef, clientName: String): Unit = subscribe(client, forClient(clientName))
+    def subscribeClientAsSelf(client: ActorRef, clientName: String): Unit = subscribe(client, classifierForClient(clientName))
 
     /**
       * Subscribe a client to the bus as a member of a client group.
@@ -220,11 +229,11 @@ object Hub {
     /**
       * Determine the subset of subscribers to which the specified message should be published.
       * @param message The [[HubMessage]] to publish.
-      * @return
+      * @return A string to be used as a message classifier ("c/ClientName" or "g/GroupName").
       */
     override protected def classify(message: HubMessage): String = {
       message match {
-        case MessageToClient(clientName, _) => forClient(clientName)
+        case MessageToClient(clientName, _) => classifierForClient(clientName)
         case MessageToGroup(groupName, _)   => forGroup(groupName)
       }
     }
@@ -232,20 +241,36 @@ object Hub {
     /**
       * Publish a message to a subscriber.
       * @param message The [[HubMessage]] to publish.
-      * @param subscriber The subscriber to which the message
+      * @param subscriber The subscriber to which the message should be published.
       */
     override protected def publish(message: HubMessage, subscriber: ActorRef): Unit = {
       subscriber ! message
     }
 
+    /**
+      * The type used to classify the audience for a given message on the bus.
+      */
     override type Classifier = String
+
+    /**
+      * The base type for all messages carried by the bus.
+      */
     override type Event = HubMessage
   }
 
-  private def forClient(clientName: String): String = s"c/$clientName"
-  private def forGroup(groupName: String): String = s"g/$groupName"
+  /**
+    * Create a message classifier for the specified client.
+    * @param clientName The client name.
+    * @return The message classifier.
+    */
+  private def classifierForClient(clientName: String): String = s"c/$clientName"
 
-  // Messages used by the hub.
+  /**
+    * Create a message classifier for the specified client group.
+    * @param groupName The group name.
+    * @return The message classifier.
+    */
+  private def forGroup(groupName: String): String = s"g/$groupName"
 
   /**
     * Represents a message sent / received by a [[Hub]].
