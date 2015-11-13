@@ -32,6 +32,11 @@ trait Hub {
     * @param message The message text.
     */
   def sendMessageToGroup(groupName: String, message: String): Unit
+
+  /**
+    * Shut the hub down.
+    */
+  def terminate(): Unit
 }
 
 /**
@@ -94,11 +99,18 @@ object Hub {
 
     new Hub {
       /**
+        * Has the hub been terminated?
+        */
+      var isTerminated = false
+
+      /**
         * Build a flow to represent the incoming flow of messages from a client.
         * @param clientName The client name.
         * @return The configured [[Flow]].
         */
       override def buildClientMessageFlow(clientName: String): Flow[String, HubMessage, Unit] = {
+        checkTerminated()
+
         // Incoming stream of messages from the client's WebSocket.
         val input =
           Flow[String]
@@ -117,7 +129,7 @@ object Hub {
         val output =
           Source.actorRef[HubMessage](1, OverflowStrategy.fail)
             .mapMaterializedValue { clientWebSocket =>
-              // When the source is first materialised, inject a ClientConnected message into the message stream.
+              // When the stream is first materialised (i.e. the client connects), inject a ClientConnected message into the message stream.
               // This enables us to capture the actor representing the client's WebSocket.
               hubActor ! ClientConnected(clientName, clientWebSocket)
             }
@@ -130,16 +142,44 @@ object Hub {
         * @param clientName The name of the client to which the message should be sent.
         * @param message The message text.
         */
-      override def sendMessageToClient(clientName: String, message: String): Unit =
+      override def sendMessageToClient(clientName: String, message: String): Unit = {
+        checkTerminated()
+
         hubActor ! MessageToClient(clientName, message)
+      }
 
       /**
         * Send a message to a group of clients.
         * @param groupName The name of the client group to which the message should be sent.
         * @param message The message text.
         */
-      override def sendMessageToGroup(groupName: String, message: String): Unit =
+      override def sendMessageToGroup(groupName: String, message: String): Unit = {
+        checkTerminated()
+
         hubActor ! MessageToGroup(groupName, message)
+      }
+
+      /**
+        * Shut down the hub and its supporting infrastructure.
+        */
+      override def terminate(): Unit = {
+        if (!isTerminated) {
+          synchronized {
+            if (!isTerminated) {
+              isTerminated = true
+
+              system.stop(hubActor)
+            }
+          }
+        }
+      }
+
+      /**
+        * Check if the hub has been terminated.
+        */
+      private[this] def checkTerminated(): Unit =
+        if (isTerminated)
+          throw new IllegalStateException("Hub has been terminated.")
     }
   }
 

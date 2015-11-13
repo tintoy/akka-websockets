@@ -14,17 +14,19 @@ object Boot extends App {
   implicit val system = ActorSystem("akka-websockets")
   implicit val materializer = ActorMaterializer()
 
-  val bindingFuture = Http().bindAndHandleSync(
-    GreeterService.create,
+  val hubService = HubService("akka-websockets")
+  val bindingFuture = Http().bindAndHandle(
+    hubService.routes,
     interface = "localhost",
     port = 19123
   )
 
   Await.result(bindingFuture, 5.seconds)
-  println("Listening on http://localhost:19123/ (press enter to terminate).")
+  println("Listening on ws://localhost:19123/hub?name=xxx (press enter to terminate).")
   StdIn.readLine()
 
   println("Shutting down...")
+  hubService.hub.terminate()
   system.terminate()
   Await.result(system.whenTerminated, 5.seconds)
 
