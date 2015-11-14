@@ -127,7 +127,7 @@ class HubSpec
     */
   trait TwoClientMessageFlowTest extends HubMessageBusTest with ClientProbes {
     /**
-      * Message emitted when a message flow just before it completes.
+      * Message emitted when by a message flow just before it completes.
       */
     case object StreamComplete
 
