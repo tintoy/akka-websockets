@@ -68,13 +68,15 @@ object Hub {
             messageBus.subscribeClientAsSelf(client, clientName)
 
           case ClientDisconnected(clientName)         =>
-            val client = clientsByName(clientName)
-            context.unwatch(client)
+            clientsByName.get(clientName) match {
+              case Some(client) =>
+                context.unwatch(client)
+                messageBus.unsubscribe(client)
+
+              case None         => // Nothing to do.
+            }
 
             clientsByName -= clientName
-            clientNames -= client
-
-            messageBus.unsubscribe(client)
 
           case JoinGroup(clientName, groupName)       =>
             val client = clientsByName(clientName)
