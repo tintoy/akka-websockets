@@ -28,7 +28,7 @@ class HubSpec
 
   type ClientMessageFlow = Flow[String, HubMessage, Unit]
 
-  implicit val materializer: ActorMaterializer = ActorMaterializer()
+  implicit val materializer = ActorMaterializer()
 
   "Hub with 2 clients" when {
     "sent a single textual message for another client" should {
