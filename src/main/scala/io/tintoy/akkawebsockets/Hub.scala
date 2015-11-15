@@ -69,11 +69,10 @@ object Hub {
 
           case ClientDisconnected(clientName)         =>
             clientsByName.get(clientName) match {
+              case None         =>
               case Some(client) =>
                 context.unwatch(client)
                 messageBus.unsubscribe(client)
-
-              case None         => // Nothing to do.
             }
 
             clientsByName -= clientName
@@ -143,13 +142,16 @@ object Hub {
         // Outgoing stream of parsed messages for the hub.
         val output =
           Source.actorRef[HubMessage](1, OverflowStrategy.fail)
+            .named("to-hub")
             .mapMaterializedValue { clientWebSocket =>
+              println(s"Materialised value = ${clientWebSocket.path}")
+
               // When the stream is first materialised (i.e. the client connects), inject a ClientConnected message into the message stream.
               // This enables us to capture the actor representing the client's WebSocket.
               hubActor ! ClientConnected(clientName, clientWebSocket)
             }
 
-        Flow.fromSinkAndSource(input, output)
+        Flow.fromSinkAndSource(input, output).named(s"ws-client-$clientName")
       }
 
       /**
