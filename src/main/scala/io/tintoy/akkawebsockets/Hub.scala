@@ -128,7 +128,7 @@ object Hub {
         // Incoming stream of messages from the client's WebSocket.
         val input =
           Flow[String]
-            .map(rawMessage => {
+            .map { rawMessage =>
               // Parse raw message to extract destination client / group ('@' for client, '#' for group).
               val parser = new Regex("^([@#])(\\w+)\\s+(.*)")
               rawMessage match {
@@ -136,7 +136,7 @@ object Hub {
                 case parser("#", targetGroupName, message)   => MessageToGroup(targetGroupName, message)
                 case otherwise                               => MessageToClient(clientName, "Message must start with @clientName or #groupName.")
               }
-            })
+            }
             .to(hubActorSink(clientName))
 
         // Outgoing stream of parsed messages for the hub.
