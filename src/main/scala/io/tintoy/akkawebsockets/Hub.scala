@@ -221,14 +221,14 @@ object Hub {
       * @param client The client's [[ActorRef]].
       * @param groupName The group name.
       */
-    def subscribeClientToGroup(client: ActorRef, groupName: String): Unit = subscribe(client, forGroup(groupName))
+    def subscribeClientToGroup(client: ActorRef, groupName: String): Unit = subscribe(client, classifierForGroup(groupName))
 
     /**
       * Unsubscribe a client from the bus as a member of a client group.
       * @param client The client's [[ActorRef]].
       * @param groupName The group name.
       */
-    def unsubscribeClientFromGroup(client: ActorRef, groupName: String): Unit = unsubscribe(client, forGroup(groupName))
+    def unsubscribeClientFromGroup(client: ActorRef, groupName: String): Unit = unsubscribe(client, classifierForGroup(groupName))
 
     /**
       * Determine the subset of subscribers to which the specified message should be published.
@@ -238,7 +238,8 @@ object Hub {
     override protected def classify(message: HubMessage): String = {
       message match {
         case MessageToClient(clientName, _) => classifierForClient(clientName)
-        case MessageToGroup(groupName, _)   => forGroup(groupName)
+        case MessageToGroup(groupName, _)   => classifierForGroup(groupName)
+        case otherwise                      => throw new IllegalArgumentException(s"Unexpected message type on hub message bus: $message")
       }
     }
 
@@ -274,7 +275,7 @@ object Hub {
     * @param groupName The group name.
     * @return The message classifier.
     */
-  private def forGroup(groupName: String): String = s"g/$groupName"
+  private def classifierForGroup(groupName: String): String = s"g/$groupName"
 
   /**
     * Represents a message sent / received by a [[Hub]].
